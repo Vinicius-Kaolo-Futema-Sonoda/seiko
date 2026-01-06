@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-import time
 import unicodedata
 from datetime import date, timedelta
 
@@ -13,135 +12,119 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, ElementClickInterceptedException
 
 
 URL = "https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM"
 
-NOMES_RAW = [
-    "VALORA CRI ÍNDICE DE PREÇO FUNDO DE INVESTIMENTO IMOBILIÁRIO - FII RESPONSABILIDADE LIMITADA",
-    "CAPITÂNIA SECURITIES II FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "XP SELECTION FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO - FII",
-    "RBR ALPHA MULTIESTRATÉGIA REAL ESTATE FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "HEDGE TOP FOFII 3 FUNDO DE INVESTIMENTO IMOBILIÁRIO DE RESPONSABILIDADE LIMITADA",
-    "FUNDO DE INVESTIMENTO IMOBILIÁRIO - FII REC RENDA IMOBILIÁRIA - RESPONSABILIDADE LIMITADA",
-    "BTG PACTUAL CORPORATE OFFICE FUND - FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "BTG PACTUAL SHOPPINGS FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "BTG PACTUAL AGRO LOGÍSTICA FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "FUNDO DE INVESTIMENTO IMOBILIÁRIO REC LOGÍSTICA - RESPONSABILIDADE LIMITADA",
-    "CARTESIA RECEBÍVEIS IMOBILIÁRIOS FII",
-    "FII AF INVEST CRI",
-    "ALIANZA TRUST RI FII",
-    "RIZA ARCTIUM FII",
-    "BRC RENDA CORPORATIVA FII RESP LIMITADA",
-    "AZ QUEST PANORAMA LOGISTICA ",
-    "BB PREMIUM MALLS FII DE RESPONSABILIDADE LIMITADA",
-    "BC FUND FII",
-    "FII GREEN TOWERS RESPONSABILIDADE LIMITADA",
-    "BRADESCO CARTEIRA IMOBILIARIA ATIVA FII",
-    "BANESTES RECEBIVEIS IMOBILIARIO FII",
-    "FII BLUEMA",
-    "BRESCO LOGISTICA FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "BRPR CORPORATE FII",
-    "BTGP AGRO LOG FII",
-    "FUNDO DE CRI  FII",
-    "FII BTG PACTUAL SHOPPINGS",
-    "BTGP HEDGE FUND FII",
-    "nan",
-    "CANUMA CAPITAL FII",
-    "nan",
-    "ITAÚ CRÉDITO IMOBILIÁRIO IPCA FII",
-    "CLAVE INDICES FII",
-    "FII SHOPPINGS AAA",
-    "CYRELA CRÉDITO - FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "FII DEVANT",
-    "FATOR VERITÀ FUNDO DE INVESTIMENTO IMOBILIÁRIO FII",
-    "nan",
-    "GAZIT MALLS FII",
-    "GGR COVEPI RENDA - FII - RESPONSABILIDADE LIMITADA",
-    "ICATU VANG GRU LOG FII",
-    "nan",
-    "FII HABITA",
-    "FII HECTAR",
-    "HEDGE BRASIL SHOPPING FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "PÁTRIA RECEBÍVEIS IMOBILIÁRIOS - FII",
-    "PÁTRIA LOG - FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "PÁTRIA ESCRITÓRIOS FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "PÁTRIA RENDA URBANA - FII",
-    "HOTEL MAXINVEST FII",
-    "HSI Ativos Financeiros FII",
-    "HSI LOGÍSTICA FII",
-    "HSI MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "HEDGE TOP FOFII 3 FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "ITAÚ TOTAL RETURN FII",
-    "JS ATIVOS FINANCEIROS FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "JS REAL ESTATE MULTIGESTÃO",
-    "JS RECEBÍVEIS IMOBILIÁRIOS FI IMOBILIÁRIO",
-    "KILIMA SUNO 30 FII",
-    "KINEA RENDA IMOBILIÁRIA FII",
-    "KINEA CREDITAS FUNDO DE INVESTIMENTO IMOBILIÁRIO – FII",
-    "KINEA HEDGE FUND FDO INV IMOBILIÁRIO",
-    "KINEA HIGH YIELD CRI FII",
-    "KINEA ÍNDICE DE PREÇOS FII",
-    "nan",
-    "KINEA SECURITIES FII",
-    "KINEA UNIQUE HY CDI FDO INV IMOBILIÁRIO",
-    "FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO KINEA FII",
-    "KILIMA VOLKANO RECEBIVEIS IMOBILIARIOS FII",
-    "KINEA OPORTUNIDADES REAL ESTATE FII",
-    "LIFE CAPITAL PARTNERS FUNDO DE INVESTIMENTOS IMOBILIÁRIOS",
-    "VBI LOGISTICO FII",
-    "FII MANATÍ CAPITAL ",
-    "MAUA CAPITAL RE FII",
-    "MAUÁ HIGH YIELD FII",
-    "MAXI RENDA FII",
-    "MERITO DESENVOLVIMENTO IMOBILIARIO I FII",
-    "OURINVEST JPP FUNDO DE INVESTIMENTO IMOBILIÁRIO – FII ",
-    "PATRIA LOG",
-    "PATRIA CRÉDITO IMOBILIÁRIO ÍNDICE DE PREÇOS FII",
-    "PARAMIS HEDGE FUND FII",
-    "PATRIA MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "POLO CRÉDITOS IMOBILIÁRIOS FII",
-    "PATRIA SECURITIES FII",
-    "FII VBI PRIME PROPERTIES",
-    "RBR LOG - FUNDO DE INVESTIMENTO IMOBILIARIO",
-    "RBR PLUS MULTI FII",
-    "FII RBR HIGH YIELD",
-    "RBR PREMIUM RECEBÍVEIS IMOBILIÁRIOS FII",
-    "RBR PROPERTIES - FII",
-    "RBR HIGH GRADE FII",
-    "FII REC RECEBÍVEIS IMOBILIÁRIOS",
-    "FII REC RENDA IMOBILIÁRIA",
-    "RIO BRAVO FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO",
-    "FII RIO BRAVO RENDA CORPORATIVA",
-    "FII RIO BRAVO RENDA VAREJO - FII",
-    "RIZA AKIN FII",
-    "Fundo de Investimento Imobiliário Riza Terrax",
-    "Tellus Rio Bravo Renda Logística FII Resp. Ltda",
-    "SPX SYN MULTI FII",
-    "SUNO CRI FII",
-    "nan",
-    "SUNO FOF FII",
-    "FII TELLUS PROPERTIES",
-    "TG ATIVO R",
-    "TIVIO RENDA IMOBILIÁRIA FII",
-    "FII RBR TOP OFFICES",
-    "nan",
-    "FII URCA  ",
-    "VALORA HEDGE FUND FII",
-    "VALORA CRI ÍNDICE FII",
-    "VALORA RE III FII",
-    "VECTIS JUROS REAL FII",
-    "VALORA RENDA IMOBILIARIA FII",
-    "Vinci Imóveis Urbanos Fundo de Investimento Imobiliário",
-    "VINCI LOGISTICA FII",
-    "VINCI OFFICES FII",
-    "VINCI SHOPPING CENTERS FII",
-    "FATOR VERITÀ MULTIESTRATEGIA FII",
-    "WHG REAL ESTATE FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "XP CRÉDITO IMOBILIÁRIO - FUNDO DE INVESTIMENTO IMOBILIÁRIO",
-    "nan",
-    "XP MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIO FII",
-    "XP SELECTION FUNDO DE FUNDOS  - FII",
+# (nome do fundo, código/ticker)
+NOMES_RAW: list[tuple[str, str]] = [
+    ("CARTESIA RECEBÍVEIS IMOBILIÁRIOS FII", "CACR11"),
+    ("FII AF INVEST CRI", "AFHI11"),
+    ("ALIANZA TRUST RI FII", "ALZR11"),
+    ("RIZA ARCTIUM FII", "RZAT11"),
+    ("BRC RENDA CORPORATIVA FII RESP LIMITADA", "FATN11"),
+    ("AZ QUEST PANORAMA LOGISTICA", "AZPL11"),
+    ("BB PREMIUM MALLS FII DE RESPONSABILIDADE LIMITADA", "BBIG11"),
+    ("BC FUND FII", "BRCR11"),
+    ("FII GREEN TOWERS RESPONSABILIDADE LIMITADA", "BCIA11"),
+    ("BRADESCO CARTEIRA IMOBILIARIA ATIVA FII", "BCIA11"),
+    ("BANESTES RECEBIVEIS IMOBILIARIO FII", "BCRI11"),
+    ("FII BLUEMA", "BLMG11"),
+    ("BRESCO LOGISTICA FUNDO DE INVESTIMENTO IMOBILIÁRIO", "BRCO11"),
+    ("BRPR CORPORATE FII", "BROF11"),
+    ("BTGP AGRO LOG FII", "BTAL11"),
+    ("FUNDO DE CRI  FII", "BTCI11"),
+    ("FII BTG PACTUAL SHOPPINGS", "BPML11"),
+    ("BTGP HEDGE FUND FII", "BTHF11"),
+    ("CANUMA CAPITAL FII", "CCME11"),
+    ("ITAÚ CRÉDITO IMOBILIÁRIO IPCA FII", "ICRI11"),
+    ("CLAVE INDICES FII", "CLIN11"),
+    ("FII SHOPPINGS AAA", "CPSH11"),
+    ("CYRELA CRÉDITO - FUNDO DE INVESTIMENTO IMOBILIÁRIO", "CYCR11"),
+    ("FII DEVANT", "DEVA11"),
+    ("FATOR VERITÀ FUNDO DE INVESTIMENTO IMOBILIÁRIO FII", "VRTA11"),
+    ("GAZIT MALLS FII", "GZIT11"),
+    ("GGR COVEPI RENDA - FII - RESPONSABILIDADE LIMITADA", "GGRC11"),
+    ("ICATU VANG GRU LOG FII", "GRUL11"),
+    ("FII HABITA", "HABT11"),
+    ("FII HECTAR", "HCTR11"),
+    ("HEDGE BRASIL SHOPPING FUNDO DE INVESTIMENTO IMOBILIÁRIO", "HGBS11"),
+    ("PÁTRIA RECEBÍVEIS IMOBILIÁRIOS - FII", "HGCR11"),
+    ("PÁTRIA LOG - FUNDO DE INVESTIMENTO IMOBILIÁRIO", "HGLG11"),
+    ("PÁTRIA ESCRITÓRIOS FUNDO DE INVESTIMENTO IMOBILIÁRIO", "HGRE11"),
+    ("PÁTRIA RENDA URBANA - FII", "HGRU11"),
+    ("HOTEL MAXINVEST FII", "HTMX11"),
+    ("HSI Ativos Financeiros FII", "HSAF11"),
+    ("HSI LOGÍSTICA FII", "HSLG11"),
+    ("HSI MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIO", "HSML11"),
+    ("HEDGE TOP FOFII 3 FUNDO DE INVESTIMENTO IMOBILIÁRIO", "HFOF11"),
+    ("ITAÚ TOTAL RETURN FII", "ITRI11"),
+    ("JS ATIVOS FINANCEIROS FUNDO DE INVESTIMENTO IMOBILIÁRIO", "JSAF11"),
+    ("JS REAL ESTATE MULTIGESTÃO", "JSRE11"),
+    ("JS RECEBÍVEIS IMOBILIÁRIOS FI IMOBILIÁRIO", "JSCR11"),
+    ("KILIMA SUNO 30 FII", "KISU11"),
+    ("KINEA RENDA IMOBILIÁRIA FII", "KNRI11"),
+    ("KINEA CREDITAS FUNDO DE INVESTIMENTO IMOBILIÁRIO – FII", "KCRE11"),
+    ("KINEA HEDGE FUND FDO INV IMOBILIÁRIO", "KNHF11"),
+    ("KINEA HIGH YIELD CRI FII", "KNHY11"),
+    ("KINEA ÍNDICE DE PREÇOS FII", "KNIP11"),
+    ("KINEA SECURITIES FII", "KNSC11"),
+    ("KINEA UNIQUE HY CDI FDO INV IMOBILIÁRIO", "KNUQ11"),
+    ("FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO KINEA FII", "KFOF11"),
+    ("KILIMA VOLKANO RECEBIVEIS IMOBILIARIOS FII", "KIVO11"),
+    ("KINEA OPORTUNIDADES REAL ESTATE FII", "KORE11"),
+    ("LIFE CAPITAL PARTNERS FUNDO DE INVESTIMENTOS IMOBILIÁRIOS", "LIFE11"),
+    ("VBI LOGISTICO FII", "LVBI11"),
+    ("FII MANATÍ CAPITAL", "MANA11"),
+    ("MAUA CAPITAL RE FII", "MCCI11"),
+    ("MAUÁ HIGH YIELD FII", "MCRE11"),
+    ("MAXI RENDA FII", "MXRF11"),
+    ("MERITO DESENVOLVIMENTO IMOBILIARIO I FII", "MFII11"),
+    ("OURINVEST JPP FUNDO DE INVESTIMENTO IMOBILIÁRIO – FII", "OUJP11"),
+    ("PATRIA LOG", "PATL11"),
+    ("PATRIA CRÉDITO IMOBILIÁRIO ÍNDICE DE PREÇOS FII", "PCIP11"),
+    ("PARAMIS HEDGE FUND FII", "PMIS11"),
+    ("PATRIA MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIO", "PMLL11"),
+    ("POLO CRÉDITOS IMOBILIÁRIOS FII", "PORD11"),
+    ("PATRIA SECURITIES FII", "PSEC11"),
+    ("FII VBI PRIME PROPERTIES", "PVBI11"),
+    ("RBR LOG - FUNDO DE INVESTIMENTO IMOBILIARIO", "RBRL11"),
+    ("RBR PLUS MULTI FII", "RBRX11"),
+    ("FII RBR HIGH YIELD", "RBRY11"),
+    ("RBR PREMIUM RECEBÍVEIS IMOBILIÁRIOS FII", "RPRI11"),
+    ("RBR PROPERTIES - FII", "RBRP11"),
+    ("RBR HIGH GRADE FII", "RBRR11"),
+    ("FII REC RECEBÍVEIS IMOBILIÁRIOS", "RECR11"),
+    ("FII REC RENDA IMOBILIÁRIA", "RECT11"),
+    ("RIO BRAVO FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO", "RBFF11"),
+    ("FII RIO BRAVO RENDA CORPORATIVA", "RCRB11"),
+    ("FII RIO BRAVO RENDA VAREJO - FII", "RBVA11"),
+    ("RIZA AKIN FII", "RZAK11"),
+    ("Fundo de Investimento Imobiliário Riza Terrax", "RZTR11"),
+    ("Tellus Rio Bravo Renda Logística FII Resp. Ltda", "TRBL11"),
+    ("SPX SYN MULTI FII", "SPXS11"),
+    ("SUNO CRI FII", "SNCI11"),
+    ("SUNO FOF FII", "SNFF11"),
+    ("FII TELLUS PROPERTIES", "TEPP11"),
+    ("TG ATIVO R", "TGAR11"),
+    ("TIVIO RENDA IMOBILIÁRIA FII", "TVRI11"),
+    ("FII RBR TOP OFFICES", "TOPP11"),
+    ("FII URCA", "URPR11"),
+    ("VALORA HEDGE FUND FII", "VGHF11"),
+    ("VALORA CRI ÍNDICE FII", "VGIP11"),
+    ("VALORA RE III FII", "VGIR11"),
+    ("VECTIS JUROS REAL FII", "VCJR11"),
+    ("VALORA RENDA IMOBILIARIA FII", "VGRI11"),
+    ("Vinci Imóveis Urbanos Fundo de Investimento Imobiliário", "VIUR11"),
+    ("VINCI LOGISTICA FII", "VILG11"),
+    ("VINCI OFFICES FII", "VINO11"),
+    ("VINCI SHOPPING CENTERS FII", "VISC11"),
+    ("FATOR VERITÀ MULTIESTRATEGIA FII", "VRTM11"),
+    ("WHG REAL ESTATE FUNDO DE INVESTIMENTO IMOBILIÁRIO", "WHGR11"),
+    ("XP CRÉDITO IMOBILIÁRIO - FUNDO DE INVESTIMENTO IMOBILIÁRIO", "XPCI11"),
+    ("XP MALLS FUNDO DE INVESTIMENTO IMOBILIÁRIOS FII", "XPML11"),
+    ("XP SELECTION FUNDO DE FUNDOS  - FII", "XPSF11"),
 ]
 
 FRASES_CATEGORIA = [
@@ -163,7 +146,7 @@ def normalize(s) -> str:
         return ""
     s = str(s).strip().casefold()
     s = unicodedata.normalize("NFD", s)
-    s = re.sub(r"[\u0300-\u036f]", "", s)  # remove acentos
+    s = re.sub(r"[\u0300-\u036f]", "", s)
     s = re.sub(r"\s+", " ", s)
     return s
 
@@ -177,9 +160,7 @@ def build_contains_pattern(terms: list[str]) -> str:
 
 
 def guess_column(df: pd.DataFrame, keywords: list[str]) -> str | None:
-    # tenta achar uma coluna cujo nome contenha alguma keyword (normalizada)
-    cols = list(df.columns)
-    for col in cols:
+    for col in list(df.columns):
         col_norm = normalize(col)
         if any(normalize(k) in col_norm for k in keywords):
             return col
@@ -192,7 +173,7 @@ def select2_by_text_click(driver, container_id: str, option_text: str, timeout: 
     )
     container.click()
 
-    # tenta select2 v3
+    # select2 v3
     try:
         results_label = WebDriverWait(driver, timeout).until(
             EC.visibility_of_element_located(
@@ -205,7 +186,7 @@ def select2_by_text_click(driver, container_id: str, option_text: str, timeout: 
     except Exception:
         pass
 
-    # tenta select2 v4
+    # select2 v4
     try:
         option = WebDriverWait(driver, timeout).until(
             EC.visibility_of_element_located(
@@ -221,23 +202,17 @@ def select2_by_text_click(driver, container_id: str, option_text: str, timeout: 
 
 def make_driver() -> webdriver.Chrome:
     opts = webdriver.ChromeOptions()
-    # headless novo (Chrome >= 109). Se der erro, troque por "--headless"
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1920,1080")
-    # Em Debian/Ubuntu com chromium instalado via apt, geralmente funciona sem setar binary_location.
-    # Se precisar, descomente e ajuste:
-    # opts.binary_location = "/usr/bin/chromium"
-
     return webdriver.Chrome(options=opts)
 
 
-def wait_table_ready(driver, timeout: int = 20):
+def wait_table_ready(driver, timeout: int = 30):
     WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.ID, "tblDocumentosEnviados"))
     )
-    # garante que o corpo da tabela carregou
     WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "#tblDocumentosEnviados tbody tr"))
     )
@@ -266,7 +241,6 @@ def read_table(driver) -> pd.DataFrame:
 
     df = pd.DataFrame(table_data[1:], columns=table_data[0])
 
-    # coluna "Ações" geralmente contém visualizarDocumento?id=XXXX&cvm=true
     if "Ações" in df.columns:
         df["DocNumber"] = (
             df["Ações"]
@@ -279,29 +253,84 @@ def read_table(driver) -> pd.DataFrame:
     return df
 
 
+def _safe_click(driver, element):
+    try:
+        element.click()
+        return
+    except (ElementClickInterceptedException, StaleElementReferenceException):
+        pass
+    # fallback: scroll + JS click
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+    driver.execute_script("arguments[0].click();", element)
+
+
 def collect_pages(driver) -> pd.DataFrame:
-    pages = []
+    """
+    Paginação robusta (evita stale):
+    - lê a página atual
+    - enquanto "next" não estiver disabled:
+        - guarda o primeiro <tr> atual (para esperar staleness)
+        - re-encontra o botão next a cada iteração
+        - clica com segurança
+        - espera o <tr> antigo ficar stale (tabela trocou)
+        - espera tabela pronta
+        - lê
+    """
+    pages: list[pd.DataFrame] = []
 
     wait_table_ready(driver)
     pages.append(read_table(driver))
 
     while True:
-        next_btn = driver.find_element(By.ID, "tblDocumentosEnviados_next")
-        classes = next_btn.get_attribute("class") or ""
-        if "disabled" in classes:
+        # re-encontra o botão next SEMPRE (evita stale)
+        try:
+            next_btn = driver.find_element(By.ID, "tblDocumentosEnviados_next")
+            classes = next_btn.get_attribute("class") or ""
+            if "disabled" in classes:
+                break
+        except StaleElementReferenceException:
+            # se deu stale aqui, tenta de novo
+            continue
+
+        # pega o primeiro row atual para esperar a troca da tabela
+        try:
+            old_first_row = driver.find_element(By.CSS_SELECTOR, "#tblDocumentosEnviados tbody tr")
+        except Exception:
+            old_first_row = None
+
+        # tenta clicar (com retry leve)
+        clicked = False
+        for _ in range(3):
+            try:
+                next_btn = driver.find_element(By.ID, "tblDocumentosEnviados_next")
+                _safe_click(driver, next_btn)
+                clicked = True
+                break
+            except StaleElementReferenceException:
+                continue
+
+        if not clicked:
+            # não conseguiu avançar, para evitar loop infinito
             break
 
-        next_btn.click()
+        # espera a tabela realmente trocar
+        if old_first_row is not None:
+            try:
+                WebDriverWait(driver, 15).until(EC.staleness_of(old_first_row))
+            except TimeoutException:
+                # se não ficou stale, ainda assim tentamos esperar a tabela
+                pass
+
         wait_table_ready(driver)
         pages.append(read_table(driver))
 
     if not pages:
         return pd.DataFrame()
+
     return pd.concat(pages, ignore_index=True)
 
 
 def filter_df(df: pd.DataFrame) -> pd.DataFrame:
-    # renomear colunas se existirem
     rename_map = {
         "Nome do Fundo": "Nome_Fundo",
         "Data de Referência": "Dt_Ref",
@@ -312,73 +341,66 @@ def filter_df(df: pd.DataFrame) -> pd.DataFrame:
         if old in df.columns:
             df = df.rename(columns={old: new})
 
-    # parse de datas (se existirem)
     if "Dt_Entrega" in df.columns:
         df["Dt_Entrega"] = pd.to_datetime(df["Dt_Entrega"], dayfirst=True, errors="coerce")
     if "Dt_Ref" in df.columns:
         df["Dt_Ref"] = pd.to_datetime(df["Dt_Ref"], dayfirst=True, errors="coerce")
 
     if "Nome_Fundo" not in df.columns:
-        # se não existir, tenta achar algo parecido
         col_guess = guess_column(df, ["nome do fundo", "fundo", "nome"])
         if col_guess:
             df = df.rename(columns={col_guess: "Nome_Fundo"})
 
-    # filtro por nomes (exato após normalização)
+    nome_para_codigo = {normalize(nome): codigo for (nome, codigo) in NOMES_RAW}
+
     df["nome_norm"] = df.get("Nome_Fundo", "").apply(normalize)
-    target_set = {normalize(x) for x in NOMES_RAW}
-    filtered = df[df["nome_norm"].isin(target_set)].copy()
+    filtered = df[df["nome_norm"].isin(nome_para_codigo.keys())].copy()
+    filtered["Codigo_Fundo"] = filtered["nome_norm"].map(nome_para_codigo).fillna("")
 
-    # filtro por FRASES (categoria)
+    # tenta padronizar "Categoria" e "Tipo"
+    cat_guess = guess_column(filtered, ["categoria", "espécie", "especie", "assunto"])
+    if cat_guess and cat_guess != "Categoria":
+        filtered = filtered.rename(columns={cat_guess: "Categoria"})
+    tipo_guess = guess_column(filtered, ["tipo", "documento", "descricao", "descrição"])
+    if tipo_guess and tipo_guess != "Tipo":
+        filtered = filtered.rename(columns={tipo_guess: "Tipo"})
+
+    # filtro por categoria
     pattern_cat = build_contains_pattern(FRASES_CATEGORIA)
-    cat_col = None
-    for key in ["categoria", "espécie", "especie", "assunto"]:
-        cat_col = guess_column(filtered, [key])
-        if cat_col:
-            break
-
     if pattern_cat:
-        if cat_col:
-            filtered["cat_norm"] = filtered[cat_col].apply(normalize)
-            result = filtered[filtered["cat_norm"].str.contains(pattern_cat, na=False)].copy()
+        if "Categoria" in filtered.columns:
+            filtered["cat_norm"] = filtered["Categoria"].apply(normalize)
+            filtered = filtered[filtered["cat_norm"].str.contains(pattern_cat, na=False)].copy()
         else:
-            # fallback: busca em todas colunas texto
             text_cols = [c for c in filtered.columns if filtered[c].dtype == "object"]
             filtered["all_text_norm"] = filtered[text_cols].apply(
                 lambda r: " ".join(normalize(v) for v in r.values if normalize(v)),
                 axis=1
             )
-            result = filtered[filtered["all_text_norm"].str.contains(pattern_cat, na=False)].copy()
-    else:
-        result = filtered.copy()
+            filtered = filtered[filtered["all_text_norm"].str.contains(pattern_cat, na=False)].copy()
 
-    # filtro por CHAVES (tipo)
+    # filtro por tipo
     pattern_tipo = build_contains_pattern(CHAVES_TIPO)
-    tipo_col = guess_column(result, ["tipo", "documento", "descricao", "descrição"])
-
     if pattern_tipo:
-        if tipo_col:
-            result["tipo_norm"] = result[tipo_col].apply(normalize)
-            final = result[result["tipo_norm"].str.contains(pattern_tipo, na=False)].copy()
+        if "Tipo" in filtered.columns:
+            filtered["tipo_norm"] = filtered["Tipo"].apply(normalize)
+            filtered = filtered[filtered["tipo_norm"].str.contains(pattern_tipo, na=False)].copy()
         else:
-            text_cols = [c for c in result.columns if result[c].dtype == "object"]
-            result["all_text_norm2"] = result[text_cols].apply(
+            text_cols = [c for c in filtered.columns if filtered[c].dtype == "object"]
+            filtered["all_text_norm2"] = filtered[text_cols].apply(
                 lambda r: " ".join(normalize(v) for v in r.values if normalize(v)),
                 axis=1
             )
-            final = result[result["all_text_norm2"].str.contains(pattern_tipo, na=False)].copy()
-    else:
-        final = result.copy()
+            filtered = filtered[filtered["all_text_norm2"].str.contains(pattern_tipo, na=False)].copy()
 
-    # remove colunas temporárias se existirem
     for tmp in ["nome_norm", "cat_norm", "tipo_norm", "all_text_norm", "all_text_norm2"]:
-        if tmp in final.columns:
-            final = final.drop(columns=[tmp])
+        if tmp in filtered.columns:
+            filtered = filtered.drop(columns=[tmp])
 
-    return final
+    return filtered
 
 
-def send_email(links: list[str]):
+def send_email(lines: list[str]):
     user = os.getenv("GMAIL_USER")
     app_pass = os.getenv("GMAIL_APP_PASS")
 
@@ -387,22 +409,21 @@ def send_email(links: list[str]):
         print("Configure assim (exemplo):")
         print("  export GMAIL_USER='seuemail@gmail.com'")
         print("  export GMAIL_APP_PASS='sua_app_password_de_16_chars'")
-        print("\nLinks gerados:")
-        print("\n".join(links))
+        print("\nConteúdo que iria no email:\n")
+        print("\n".join(lines))
         return
 
-    text_body = "Olá,\n\nSeguem os links dos documentos:\n\n" + "\n".join(links)
+    text_body = "Olá,\n\nSeguem os documentos:\n\n" + "\n".join(lines)
     yag = yagmail.SMTP(user, app_pass)
     yag.send(to=EMAIL_TO, subject=EMAIL_SUBJECT, contents=[text_body])
     yag.close()
-    print(f"Email enviado com {len(links)} links.")
+    print(f"Email enviado com {len(lines)} linhas.")
 
 
 def main():
     driver = make_driver()
     try:
         driver.get(URL)
-
         wait = WebDriverWait(driver, 20)
 
         # abrir filtros
@@ -419,7 +440,7 @@ def main():
 
         ok = select2_by_text_click(driver, "s2id_tipoFundo", "Fundo Imobiliário")
         if not ok:
-            raise RuntimeError("Não consegui selecionar 'Fundo Imobiliário' no select2 (s2id_tipoFundo).")
+            raise RuntimeError("Não consegui selecionar 'Fundo Imobiliário'.")
 
         # filtrar
         wait.until(EC.element_to_be_clickable((By.ID, "filtrar"))).click()
@@ -432,7 +453,6 @@ def main():
         Select(dropdown).select_by_value("100")
         wait_table_ready(driver)
 
-        # coletar páginas
         data = collect_pages(driver)
         if data.empty:
             print("Tabela vazia / nada encontrado.")
@@ -444,40 +464,43 @@ def main():
         except Exception:
             pass
 
-    # filtrar e preparar links
     df_final = filter_df(data)
 
     if df_final.empty:
         print("Nenhum registro após os filtros.")
         return
 
-    # montar links
-    links = []
+    # linhas: CODIGO | CATEGORIA - TIPO: LINK
+    lines: list[str] = []
     for row in df_final.itertuples(index=False):
         doc = getattr(row, "DocNumber", None)
         if doc is None or (isinstance(doc, float) and pd.isna(doc)) or str(doc).strip() == "":
             continue
 
-        # tenta pegar Categoria/Tipo se existirem
-        cat = getattr(row, "Categoria", None) if "Categoria" in df_final.columns else None
-        tipo = getattr(row, "Tipo", None) if "Tipo" in df_final.columns else None
+        codigo = getattr(row, "Codigo_Fundo", "") or ""
+        if isinstance(codigo, float) and pd.isna(codigo):
+            codigo = ""
+        codigo = str(codigo).strip()
 
-        parts = []
-        if cat is not None and not (isinstance(cat, float) and pd.isna(cat)) and str(cat).strip():
-            parts.append(str(cat).strip())
-        if tipo is not None and not (isinstance(tipo, float) and pd.isna(tipo)) and str(tipo).strip():
-            parts.append(str(tipo).strip())
+        categoria = getattr(row, "Categoria", "") if "Categoria" in df_final.columns else ""
+        if isinstance(categoria, float) and pd.isna(categoria):
+            categoria = ""
+        categoria = str(categoria).strip()
 
-        prefix = " - ".join(parts) if parts else "Sem categoria/tipo"
+        tipo = getattr(row, "Tipo", "") if "Tipo" in df_final.columns else ""
+        if isinstance(tipo, float) and pd.isna(tipo):
+            tipo = ""
+        tipo = str(tipo).strip()
+
+        prefix = " - ".join([p for p in [categoria, tipo] if p]) or "Sem categoria/tipo"
         link = f"https://fnet.bmfbovespa.com.br/fnet/publico/visualizarDocumento?id={doc}&cvm=true"
-        links.append(f"{prefix}: {link}")
 
-    # salva CSVs
+        lines.append(f"{codigo} | {prefix}: {link}")
+
     df_final.to_csv("resultado_filtrado.csv", index=False)
     print(f"Salvo: resultado_filtrado.csv ({len(df_final)} linhas)")
 
-    # envia email (ou imprime links se não tiver env vars)
-    send_email(links)
+    send_email(lines)
 
 
 if __name__ == "__main__":
