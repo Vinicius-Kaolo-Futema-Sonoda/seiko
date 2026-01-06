@@ -1,140 +1,23 @@
-from selenium import webdriver
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
-import pandas as pd
-from bs4 import BeautifulSoup
-import time
-from datetime import datetime, timedelta
-from datetime import date
-import pandas as pd
-import unicodedata
+from __future__ import annotations
+
+import os
 import re
+import time
+import unicodedata
+from datetime import date, timedelta
 
-driver = webdriver.Firefox()
-driver.get('https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM')
-time.sleep(1)
+import pandas as pd
+import yagmail
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-filtro = driver.find_element(value = 'showFiltros')
-filtro.click()
-time.sleep(1)
 
-hoje = date.today()
-ontem = hoje - timedelta(days=1)
-valor = f"{ontem.day:02d}/{ontem.month:02d}/{ontem.year}"
+URL = "https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM"
 
-el = WebDriverWait(driver, 10).until(
-    EC.element_to_be_clickable((By.ID, "dataInicial"))
-)
-
-el.clear()
-el.send_keys(valor)
-
-def select2_by_text_click(driver, container_id, option_text, timeout=10):
-    # 1) abrir o select2
-    container = WebDriverWait(driver, timeout).until(
-        EC.element_to_be_clickable((By.ID, container_id))
-    )
-    container.click()
-
-    # 2) esperar o dropdown aparecer (v3 ou v4)
-    # v3 usa 'select2-drop' e 'select2-result-label'
-    # v4 usa 'select2-dropdown' e 'select2-results__option'
-    try:
-        # tenta v3
-        results_label = WebDriverWait(driver, timeout).until(
-            EC.visibility_of_element_located((By.XPATH,
-                f"//li[contains(@class,'select2-result') or contains(@class,'select2-result-selectable')]//div[contains(@class,'select2-result-label') and normalize-space(.)='{option_text}']"))
-        )
-        results_label.click()
-        return True
-    except Exception:
-        pass
-
-    try:
-        # tenta v4
-        option = WebDriverWait(driver, timeout).until(
-            EC.visibility_of_element_located((By.XPATH,
-                f"//li[contains(@class,'select2-results__option') and normalize-space(.)='{option_text}']"))
-        )
-        option.click()
-        return True
-    except Exception:
-        pass
-
-    return False
-
-select2_by_text_click(driver, "s2id_tipoFundo", "Fundo Imobiliário")
-filtrar = driver.find_element(value = "filtrar")
-filtrar.click()
-time.sleep(5)
-
-dropdown = driver.find_element(By.CSS_SELECTOR, 'div#tblDocumentosEnviados_length select')
-
-# Create a Select object
-select = Select(dropdown)
-
-# Select the "100" option by value
-select.select_by_value('100')
-time.sleep(1)
-
-def read_table():
-
-    table_element = driver.find_element(value = "tblDocumentosEnviados")
-
-    # Get the HTML content of the table
-    table_html = table_element.get_attribute('outerHTML')
-
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(table_html, 'html.parser')
-
-    # Extract the table data using BeautifulSoup
-    table_data = []
-    for row in soup.find_all('tr'):
-        row_data = []
-        for cell in row.find_all(['th', 'td']):
-            if cell.find('a'):  # Check if the cell contains a link
-                link = cell.find('a')
-                cell_data = link['href'] #{
-                    #'text': link.text.strip(),
-                    #'url': link['href']
-                #}
-            else:
-                cell_data = cell.text.strip()
-            row_data.append(cell_data)
-        table_data.append(row_data)
-
-    # Convert the table data into a Pandas DataFrame
-    df = pd.DataFrame(table_data[1:], columns=table_data[0])
-    df['DocNumber'] = df['Ações'].apply(lambda x: x.replace('visualizarDocumento?id=', '').replace('&cvm=true', ''))
-    df = df.drop(columns='Ações')
-
-    return df
-
-next = driver.find_element(value = "tblDocumentosEnviados_next")
-
-pages = []
-while next.get_attribute('class') != 'paginate_button next disabled':
-    pages.append(read_table())
-    next.click()
-    time.sleep(10)
-    next = driver.find_element(value = "tblDocumentosEnviados_next")
-
-pages.append(read_table())
-
-driver.close()
-
-data = (
-    pd.concat(pages)
-    .rename(columns = {'Nome do Fundo': 'Nome_Fundo', 'Data de Referência': 'Dt_Ref', 'Data de Entrega': 'Dt_Entrega', 'Espécie': 'Especie'})
-    .assign(Dt_Entrega = lambda x: pd.to_datetime(x['Dt_Entrega'], dayfirst=True))
-    .assign(Dt_Ref = lambda x: pd.to_datetime(x['Dt_Ref'], format='mixed', dayfirst=True))
-)
-
-nomes_raw = [
+NOMES_RAW = [
     "VALORA CRI ÍNDICE DE PREÇO FUNDO DE INVESTIMENTO IMOBILIÁRIO - FII RESPONSABILIDADE LIMITADA",
     "CAPITÂNIA SECURITIES II FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
     "XP SELECTION FUNDO DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO - FII",
@@ -144,172 +27,344 @@ nomes_raw = [
     "BTG PACTUAL CORPORATE OFFICE FUND - FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
     "BTG PACTUAL SHOPPINGS FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
     "BTG PACTUAL AGRO LOGÍSTICA FUNDO DE INVESTIMENTO IMOBILIÁRIO RESPONSABILIDADE LIMITADA",
-    "FUNDO DE INVESTIMENTO IMOBILIÁRIO REC LOGÍSTICA - RESPONSABILIDADE LIMITADA"
+    "FUNDO DE INVESTIMENTO IMOBILIÁRIO REC LOGÍSTICA - RESPONSABILIDADE LIMITADA",
 ]
 
-def normalize(s):
-    if pd.isna(s):
+FRASES_CATEGORIA = [
+    "Fato Relevante",
+    "Aviso aos Cotistas - Estruturado",
+]
+
+CHAVES_TIPO = [
+    "AGE",
+    "Relatório Gerencial",
+]
+
+EMAIL_TO = ["diego@seikopartners.com.br", "fabio@seikopartners.com.br"]
+EMAIL_SUBJECT = "Relatório dos Fundo Imobiliários"
+
+
+def normalize(s) -> str:
+    if s is None or (isinstance(s, float) and pd.isna(s)):
         return ""
-    s = str(s).strip().casefold()                    # trim + casefold
-    s = unicodedata.normalize("NFD", s)              # decompor acentos
-    s = re.sub(r"[\u0300-\u036f]", "", s)            # remover marcadores de acento
-    s = re.sub(r"\s+", " ", s)                       # normalizar espaços múltiplos
+    s = str(s).strip().casefold()
+    s = unicodedata.normalize("NFD", s)
+    s = re.sub(r"[\u0300-\u036f]", "", s)  # remove acentos
+    s = re.sub(r"\s+", " ", s)
     return s
 
-# --- carregar / ter o DataFrame (ex.: df já existe). Exemplo de leitura:
-# df = pd.read_csv("tabela.csv")   # ou df = seu_dataframe
-df = data
-# normalizar coluna e a lista de nomes
-df["nome_norm"] = df["Nome_Fundo"].apply(normalize)
-target_set = {normalize(x) for x in nomes_raw}      # set para lookup rápido
 
-# --- FILTRO EXATO (recomendado quando quer correspondência inteira) ---
-filtered = df[df["nome_norm"].isin(target_set)].copy()
+def build_contains_pattern(terms: list[str]) -> str:
+    terms_norm = [normalize(t) for t in terms if t and str(t).strip()]
+    terms_norm = [t for t in terms_norm if t]
+    if not terms_norm:
+        return ""
+    return "|".join(re.escape(t) for t in terms_norm)
 
-# --- opcional: FILTRO POR SUBSTRING (se quiser manter linhas que contenham qualquer dos nomes) ---
-# construir regex seguro (escape) a partir da lista normalizada
-pattern = "|".join(re.escape(x) for x in target_set)
-filtered_contains = df[df["nome_norm"].str.contains(pattern, na=False)].copy()
 
-# --- exportar ou usar ---
-filtered.to_csv("filtrados_exatos.csv", index=False)
-# filtered_contains.to_csv("filtrados_contains.csv", index=False)
-
-# print("exatos:", len(filtered), "contendo (substring):", len(filtered_contains))
-
-frases = [
-    "Fato Relevante",
-    "Aviso aos Cotistas - Estruturado"
-]
-
-# --- normaliza as frases target e cria regex (escaped) ---
-frases_norm = [normalize(f) for f in frases]
-pattern = "|".join(re.escape(f) for f in frases_norm)  # regex: frase1|frase2
-
-# --- 1) tentar identificar coluna de categoria automaticamente ---
-def guess_category_column(df):
-    candidates = []
-    for col in df.columns:
+def guess_column(df: pd.DataFrame, keywords: list[str]) -> str | None:
+    # tenta achar uma coluna cujo nome contenha alguma keyword (normalizada)
+    cols = list(df.columns)
+    for col in cols:
         col_norm = normalize(col)
-        # procurar termos comuns em nomes de colunas
-        if any(k in col_norm for k in ("Categoria", "categoria")):
-            candidates.append(col)
-    return candidates[0] if candidates else None
-
-cat_col = guess_category_column(filtered)
-
-if cat_col:
-    # cria uma coluna normalizada da categoria
-    filtered["cat_norm"] = filtered[cat_col].apply(normalize)
-    # 2 opções: exact match (isin) ou contains (substring). Aqui usamos contains (mais flexível)
-    result = filtered[filtered["cat_norm"].str.contains(pattern, na=False)].copy()
-else:
-    # fallback: procurar nas colunas textuais (concatena conteúdo das colunas string e busca)
-    text_cols = [c for c in filtered.columns if filtered[c].dtype == "object"]
-    if not text_cols:
-        raise ValueError("Nenhuma coluna textual encontrada para procurar as frases.")
-    # cria coluna temporária com concat das colunas textuais normalizadas
-    def concat_norm(row):
-        parts = [normalize(row[c]) for c in text_cols]
-        return " ".join(p for p in parts if p)
-    filtered["all_text_norm"] = filtered.apply(concat_norm, axis=1)
-    result = filtered[filtered["all_text_norm"].str.contains(pattern, na=False)].copy()
-
-# --- opcional: remover colunas norm temporárias ou manter para debug ---
-# result = result.drop(columns=[c for c in ("cat_norm", "all_text_norm") if c in result.columns])
-
-# --- salvar ou usar ---
-
-chaves = [
-    "AGE",
-    "Relatório Gerencial"
-]
-
-chaves_norm = [normalize(x) for x in chaves]
-pattern = "|".join(re.escape(x) for x in chaves_norm)  # ex: "age|relatorio gerencial"
-
-# --- escolher DataFrame base: tenta usar 'result' (do passo anterior), senão 'filtered', senão 'df' ---
-try:
-    base_df = filtered
-except NameError:
-        base_df = filtered
+        if any(normalize(k) in col_norm for k in keywords):
+            return col
+    return None
 
 
-# --- tentar adivinhar o nome da coluna 'tipo' (ou setar manualmente abaixo) ---
-def guess_type_column(df):
-    candidates = []
-    for col in df.columns:
-        col_norm = normalize(col)
-        if any(k in col_norm for k in ("tipo", "Tipo")):
-            candidates.append(col)
-    return candidates[0] if candidates else None
+def select2_by_text_click(driver, container_id: str, option_text: str, timeout: int = 15) -> bool:
+    container = WebDriverWait(driver, timeout).until(
+        EC.element_to_be_clickable((By.ID, container_id))
+    )
+    container.click()
 
-tipo_col = guess_type_column(base_df)
-# --- se souber o nome exato da coluna, descomente e ajuste:
-# tipo_col = "Tipo"  # ou "tipo", "TipoDocumento", etc.
+    # tenta select2 v3
+    try:
+        results_label = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located(
+                (By.XPATH,
+                 f"//div[contains(@class,'select2-result-label') and normalize-space(.)='{option_text}']")
+            )
+        )
+        results_label.click()
+        return True
+    except Exception:
+        pass
 
-if tipo_col:
-    base_df["tipo_norm"] = base_df[tipo_col].apply(normalize)
-    final = base_df[base_df["tipo_norm"].str.contains(pattern, na=False)].copy()
-else:
-    # fallback: procurar em todas colunas string (concatena e busca)
-    text_cols = [c for c in base_df.columns if base_df[c].dtype == "object"]
-    if not text_cols:
-        raise ValueError("Nenhuma coluna textual encontrada para procurar as chaves.")
-    def concat_norm(row):
-        parts = [normalize(row[c]) for c in text_cols]
-        return " ".join(p for p in parts if p)
-    base_df["all_text_norm"] = base_df.apply(concat_norm, axis=1)
-    final = base_df[base_df["all_text_norm"].str.contains(pattern, na=False)].copy()
+    # tenta select2 v4
+    try:
+        option = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located(
+                (By.XPATH,
+                 f"//li[contains(@class,'select2-results__option') and normalize-space(.)='{option_text}']")
+            )
+        )
+        option.click()
+        return True
+    except Exception:
+        return False
 
-# --- opcional: remover colunas temporárias criadas ---
-for tmp in ("tipo_norm", "all_text_norm"):
-    if tmp in final.columns:
-        # se quiser manter para debug, comente a linha abaixo
-        final = final.drop(columns=[tmp])
 
-# --- resultado ---
+def make_driver() -> webdriver.Chrome:
+    opts = webdriver.ChromeOptions()
+    # headless novo (Chrome >= 109). Se der erro, troque por "--headless"
+    opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--window-size=1920,1080")
+    # Em Debian/Ubuntu com chromium instalado via apt, geralmente funciona sem setar binary_location.
+    # Se precisar, descomente e ajuste:
+    # opts.binary_location = "/usr/bin/chromium"
 
-dfFinal = pd.concat([result,final])
+    return webdriver.Chrome(options=opts)
 
-import yagmail, os
 
-USER = "viniciuskaolo@gmail.com"           # seu gmail
-APP_PASS = "hjlv knog yxjt muku"   # app password (16 chars)
+def wait_table_ready(driver, timeout: int = 20):
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.ID, "tblDocumentosEnviados"))
+    )
+    # garante que o corpo da tabela carregou
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#tblDocumentosEnviados tbody tr"))
+    )
 
-links = []
 
-for row in dfFinal.itertuples(index=False):  # index=False para não incluir Index no tuple
-    valor = getattr(row, "DocNumber")    # ou row.DocNumber
-    if pd.isna(valor):
-        continue
+def read_table(driver) -> pd.DataFrame:
+    table_element = driver.find_element(By.ID, "tblDocumentosEnviados")
+    table_html = table_element.get_attribute("outerHTML")
 
-    # pegar Categoria e Tipo (tratando NaNs)
-    cat = getattr(row, "Categoria")
-    tipo = getattr(row, "Tipo")
+    soup = BeautifulSoup(table_html, "html.parser")
 
-    parts = []
-    if pd.notna(cat):
-        parts.append(str(cat).strip())
-    if pd.notna(tipo):
-        parts.append(str(tipo).strip())
+    table_data = []
+    for row in soup.find_all("tr"):
+        row_data = []
+        for cell in row.find_all(["th", "td"]):
+            if cell.find("a"):
+                link = cell.find("a")
+                cell_data = link.get("href", "").strip()
+            else:
+                cell_data = cell.get_text(strip=True)
+            row_data.append(cell_data)
+        table_data.append(row_data)
 
-    prefix = " - ".join(parts) if parts else "Sem categoria/tipo"
+    if not table_data or len(table_data) < 2:
+        return pd.DataFrame()
 
-    link = f"https://fnet.bmfbovespa.com.br/fnet/publico/visualizarDocumento?id={valor}&cvm=true"
-    links.append(f"{prefix}: {link}")
+    df = pd.DataFrame(table_data[1:], columns=table_data[0])
 
-# --- fallback em texto (bom para clientes que não renderizam HTML) ---
-text_body = "Olá,\n\nSeguem os links dos documentos:\n\n" + "\n".join(links)
+    # coluna "Ações" geralmente contém visualizarDocumento?id=XXXX&cvm=true
+    if "Ações" in df.columns:
+        df["DocNumber"] = (
+            df["Ações"]
+            .astype(str)
+            .str.replace("visualizarDocumento?id=", "", regex=False)
+            .str.replace("&cvm=true", "", regex=False)
+        )
+        df = df.drop(columns=["Ações"])
 
-# --- versão HTML com lista clicável ---
-# (pode personalizar o texto do link, ex: "Documento {i+1}" se preferir)
-# --- enviar com yagmail (texto + HTML) ---
-yag = yagmail.SMTP(USER, APP_PASS)
-yag.send(
-    to=["diego@seikopartners.com.br","fabio@seikopartners.com.br"],
-    subject="Relatório dos Fundo Imobiliários",
-    contents=[text_body],  # primeiro texto, depois html
-)
-yag.close()
-print("Email enviado com", len(links), "links.")
+    return df
+
+
+def collect_pages(driver) -> pd.DataFrame:
+    pages = []
+
+    wait_table_ready(driver)
+    pages.append(read_table(driver))
+
+    while True:
+        next_btn = driver.find_element(By.ID, "tblDocumentosEnviados_next")
+        classes = next_btn.get_attribute("class") or ""
+        if "disabled" in classes:
+            break
+
+        next_btn.click()
+        wait_table_ready(driver)
+        pages.append(read_table(driver))
+
+    if not pages:
+        return pd.DataFrame()
+    return pd.concat(pages, ignore_index=True)
+
+
+def filter_df(df: pd.DataFrame) -> pd.DataFrame:
+    # renomear colunas se existirem
+    rename_map = {
+        "Nome do Fundo": "Nome_Fundo",
+        "Data de Referência": "Dt_Ref",
+        "Data de Entrega": "Dt_Entrega",
+        "Espécie": "Especie",
+    }
+    for old, new in rename_map.items():
+        if old in df.columns:
+            df = df.rename(columns={old: new})
+
+    # parse de datas (se existirem)
+    if "Dt_Entrega" in df.columns:
+        df["Dt_Entrega"] = pd.to_datetime(df["Dt_Entrega"], dayfirst=True, errors="coerce")
+    if "Dt_Ref" in df.columns:
+        df["Dt_Ref"] = pd.to_datetime(df["Dt_Ref"], dayfirst=True, errors="coerce")
+
+    if "Nome_Fundo" not in df.columns:
+        # se não existir, tenta achar algo parecido
+        col_guess = guess_column(df, ["nome do fundo", "fundo", "nome"])
+        if col_guess:
+            df = df.rename(columns={col_guess: "Nome_Fundo"})
+
+    # filtro por nomes (exato após normalização)
+    df["nome_norm"] = df.get("Nome_Fundo", "").apply(normalize)
+    target_set = {normalize(x) for x in NOMES_RAW}
+    filtered = df[df["nome_norm"].isin(target_set)].copy()
+
+    # filtro por FRASES (categoria)
+    pattern_cat = build_contains_pattern(FRASES_CATEGORIA)
+    cat_col = None
+    for key in ["categoria", "espécie", "especie", "assunto"]:
+        cat_col = guess_column(filtered, [key])
+        if cat_col:
+            break
+
+    if pattern_cat:
+        if cat_col:
+            filtered["cat_norm"] = filtered[cat_col].apply(normalize)
+            result = filtered[filtered["cat_norm"].str.contains(pattern_cat, na=False)].copy()
+        else:
+            # fallback: busca em todas colunas texto
+            text_cols = [c for c in filtered.columns if filtered[c].dtype == "object"]
+            filtered["all_text_norm"] = filtered[text_cols].apply(
+                lambda r: " ".join(normalize(v) for v in r.values if normalize(v)),
+                axis=1
+            )
+            result = filtered[filtered["all_text_norm"].str.contains(pattern_cat, na=False)].copy()
+    else:
+        result = filtered.copy()
+
+    # filtro por CHAVES (tipo)
+    pattern_tipo = build_contains_pattern(CHAVES_TIPO)
+    tipo_col = guess_column(result, ["tipo", "documento", "descricao", "descrição"])
+
+    if pattern_tipo:
+        if tipo_col:
+            result["tipo_norm"] = result[tipo_col].apply(normalize)
+            final = result[result["tipo_norm"].str.contains(pattern_tipo, na=False)].copy()
+        else:
+            text_cols = [c for c in result.columns if result[c].dtype == "object"]
+            result["all_text_norm2"] = result[text_cols].apply(
+                lambda r: " ".join(normalize(v) for v in r.values if normalize(v)),
+                axis=1
+            )
+            final = result[result["all_text_norm2"].str.contains(pattern_tipo, na=False)].copy()
+    else:
+        final = result.copy()
+
+    # remove colunas temporárias se existirem
+    for tmp in ["nome_norm", "cat_norm", "tipo_norm", "all_text_norm", "all_text_norm2"]:
+        if tmp in final.columns:
+            final = final.drop(columns=[tmp])
+
+    return final
+
+
+def send_email(links: list[str]):
+    user = os.getenv("GMAIL_USER")
+    app_pass = os.getenv("GMAIL_APP_PASS")
+
+    if not user or not app_pass:
+        print("\n[AVISO] Variáveis de ambiente não configuradas. Não vou enviar email.")
+        print("Configure assim (exemplo):")
+        print("  export GMAIL_USER='seuemail@gmail.com'")
+        print("  export GMAIL_APP_PASS='sua_app_password_de_16_chars'")
+        print("\nLinks gerados:")
+        print("\n".join(links))
+        return
+
+    text_body = "Olá,\n\nSeguem os links dos documentos:\n\n" + "\n".join(links)
+    yag = yagmail.SMTP(user, app_pass)
+    yag.send(to=EMAIL_TO, subject=EMAIL_SUBJECT, contents=[text_body])
+    yag.close()
+    print(f"Email enviado com {len(links)} links.")
+
+
+def main():
+    driver = make_driver()
+    try:
+        driver.get(URL)
+
+        wait = WebDriverWait(driver, 20)
+
+        # abrir filtros
+        wait.until(EC.element_to_be_clickable((By.ID, "showFiltros"))).click()
+
+        # dataInicial = ontem
+        hoje = date.today()
+        ontem = hoje - timedelta(days=1)
+        valor_data = f"{ontem.day:02d}/{ontem.month:02d}/{ontem.year}"
+
+        el = wait.until(EC.element_to_be_clickable((By.ID, "dataInicial")))
+        el.clear()
+        el.send_keys(valor_data)
+
+        ok = select2_by_text_click(driver, "s2id_tipoFundo", "Fundo Imobiliário")
+        if not ok:
+            raise RuntimeError("Não consegui selecionar 'Fundo Imobiliário' no select2 (s2id_tipoFundo).")
+
+        # filtrar
+        wait.until(EC.element_to_be_clickable((By.ID, "filtrar"))).click()
+
+        # esperar tabela e setar 100 linhas
+        wait_table_ready(driver)
+        dropdown = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div#tblDocumentosEnviados_length select"))
+        )
+        Select(dropdown).select_by_value("100")
+        wait_table_ready(driver)
+
+        # coletar páginas
+        data = collect_pages(driver)
+        if data.empty:
+            print("Tabela vazia / nada encontrado.")
+            return
+
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+    # filtrar e preparar links
+    df_final = filter_df(data)
+
+    if df_final.empty:
+        print("Nenhum registro após os filtros.")
+        return
+
+    # montar links
+    links = []
+    for row in df_final.itertuples(index=False):
+        doc = getattr(row, "DocNumber", None)
+        if doc is None or (isinstance(doc, float) and pd.isna(doc)) or str(doc).strip() == "":
+            continue
+
+        # tenta pegar Categoria/Tipo se existirem
+        cat = getattr(row, "Categoria", None) if "Categoria" in df_final.columns else None
+        tipo = getattr(row, "Tipo", None) if "Tipo" in df_final.columns else None
+
+        parts = []
+        if cat is not None and not (isinstance(cat, float) and pd.isna(cat)) and str(cat).strip():
+            parts.append(str(cat).strip())
+        if tipo is not None and not (isinstance(tipo, float) and pd.isna(tipo)) and str(tipo).strip():
+            parts.append(str(tipo).strip())
+
+        prefix = " - ".join(parts) if parts else "Sem categoria/tipo"
+        link = f"https://fnet.bmfbovespa.com.br/fnet/publico/visualizarDocumento?id={doc}&cvm=true"
+        links.append(f"{prefix}: {link}")
+
+    # salva CSVs
+    df_final.to_csv("resultado_filtrado.csv", index=False)
+    print(f"Salvo: resultado_filtrado.csv ({len(df_final)} linhas)")
+
+    # envia email (ou imprime links se não tiver env vars)
+    send_email(links)
+
+
+if __name__ == "__main__":
+    main()
