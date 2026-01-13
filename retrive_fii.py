@@ -401,8 +401,8 @@ def filter_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def send_email(lines: list[str]):
-    user = os.getenv("GMAIL_USER")
-    app_pass = os.getenv("GMAIL_APP_PASS")
+    user = "viniciuskaolo@gmail.com"           # seu gmail
+    app_pass = "hjlv knog yxjt muku"   # app password (16 chars)
 
     if not user or not app_pass:
         print("\n[AVISO] Variáveis de ambiente não configuradas. Não vou enviar email.")
